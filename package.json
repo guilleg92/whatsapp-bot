@@ -1,13 +1,16 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
+  "description": "Whatsapp bot using whatsapp-web.js",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.18.0",
-    "puppeteer": "^18.0.0",
-    "node-schedule": "^2.1.0"
-  }
+    "whatsapp-web.js": "^1.0.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {},
+  "author": "",
+  "license": "ISC"
 }
