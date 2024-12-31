@@ -28,7 +28,7 @@ client.on('ready', () => {
     console.log('Cliente listo!');
     
     // Define la hora de envío (por ejemplo, 12:30) usando cron para node-schedule
-    const sendTime = '30 12 * * *';  // Todos los días a las 12:30 (hora del servidor)
+    const sendTime = '50 12 * * *';  // Todos los días a las 12:30 (hora del servidor)
     
     // Programar el envío del mensaje
     schedule.scheduleJob(sendTime, function() {
