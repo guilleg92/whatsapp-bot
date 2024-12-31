@@ -1,69 +1,67 @@
-const { Client } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const moment = require('moment-timezone');
 
-// Configuración
-const groupName = 'Prueba'; // Nombre del grupo
-const message = 'Mensaje de Prueba'; // Mensaje a enviar
-const scheduledTime = '12:35'; // Hora en formato HH:MM (hora de Madrid)
-const intervalMs = 10; // Intervalo en milisegundos para intentos
+// Definir el grupo y el mensaje
+const groupName = 'Prueba';
+const message = 'Mensaje de Prueba';
 
-// Función para obtener la hora actual en Madrid
-const getCurrentTimeInMadrid = () => {
-    const now = new Date();
-    const madridOffset = 1; // UTC+1
-    const isDST = now.getUTCMonth() >= 2 && now.getUTCMonth() <= 9; // Marzo a Octubre
-    const offset = madridOffset + (isDST ? 1 : 0); // Agregar 1 si es horario de verano
-    const madridTime = new Date(now.getTime() + offset * 60 * 60 * 1000);
-    return madridTime.toTimeString().split(' ')[0].slice(0, 5);
-};
+// Hora en la que se debe enviar el mensaje (en formato HH:mm, hora de Madrid)
+const targetTime = '12:50';
 
-// Inicializar el cliente
-const client = new Client();
+// Usar la zona horaria de Madrid
+moment.tz.setDefault("Europe/Madrid");
+
+const client = new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+        headless: true, // Asegúrate de que Puppeteer se ejecute en modo headless
+        args: [
+            '--no-sandbox',  // Soluciona problemas de seguridad en entornos sin cabeza
+            '--disable-setuid-sandbox', // Para entornos como servidores
+            '--disable-dev-shm-usage', // Evita problemas de memoria
+            '--disable-gpu', // Desactiva la aceleración de hardware
+            '--window-size=1920x1080' // Define el tamaño de la ventana (necesario en algunos entornos)
+        ]
+    }
+});
 
 client.on('qr', (qr) => {
-    console.log('Escanea este código QR con WhatsApp para iniciar sesión:');
-    qrcode.generate(qr, { small: true });
+    console.log('QR recibido', qr);
+    // El QR debe ser escaneado por ti para autenticar la sesión
 });
 
-client.on('ready', () => {
+client.on('ready', async () => {
     console.log('Cliente listo. Buscando el grupo...');
-
-    const checkTime = () => {
-        const currentTime = getCurrentTimeInMadrid();
-        return currentTime >= scheduledTime;
-    };
-
-    const sendMessage = async () => {
-        try {
-            const chats = await client.getChats();
-            const group = chats.find(chat => chat.name === groupName);
-
-            if (group) {
-                console.log(`Grupo encontrado: ${groupName}`);
+    
+    // Obtener el grupo
+    const chats = await client.getChats();
+    const group = chats.find(chat => chat.name === groupName);
+    
+    if (group) {
+        console.log(`Grupo encontrado: ${groupName}`);
+        
+        // Función que verifica la hora actual y envía el mensaje si es la hora correcta
+        const checkTimeAndSend = async () => {
+            const currentTime = moment.tz('Europe/Madrid').format('HH:mm');
+            console.log(`Hora actual: ${currentTime}`);
+            
+            if (currentTime === targetTime) {
+                console.log('Es la hora correcta para enviar el mensaje.');
                 await group.sendMessage(message);
-                console.log('Mensaje enviado con éxito.');
-                clearInterval(intervalId);
-            } else {
-                console.log('Grupo no encontrado. Intentando de nuevo...');
+                console.log('Mensaje enviado.');
+                clearInterval(intervalId); // Detener el intervalo después de enviar el mensaje
             }
-        } catch (error) {
-            console.error('Error al enviar el mensaje:', error);
-        }
-    };
-
-    const intervalId = setInterval(() => {
-        if (checkTime()) {
-            sendMessage();
-        }
-    }, intervalMs);
+        };
+        
+        // Configurar el intervalo para hacer intentos cada 100ms (0.1 segundos)
+        const intervalId = setInterval(checkTimeAndSend, 100); // Realiza intentos cada 100ms
+    } else {
+        console.log(`No se encontró el grupo ${groupName}`);
+    }
 });
 
-client.on('auth_failure', (msg) => {
-    console.error('Error de autenticación:', msg);
-});
-
-client.on('disconnected', (reason) => {
-    console.log('Cliente desconectado:', reason);
+client.on('message', (message) => {
+    console.log('Nuevo mensaje:', message.body);
 });
 
 client.initialize();
