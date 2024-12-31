@@ -2,9 +2,9 @@ const { Client } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
 // Configuración
-const groupName = 'Nombre del Grupo'; // Cambia por el nombre exacto del grupo
-const message = '¡Este es mi mensaje ganador!'; // Cambia por el mensaje que deseas enviar
-const scheduledTime = '03:00'; // Cambia por la hora en formato HH:MM
+const groupName = 'Prueba'; // Nombre del grupo
+const message = 'Mensaje de Prueba'; // Mensaje a enviar
+const scheduledTime = '12:30'; // Hora en formato HH:MM (hora de Madrid)
 const intervalMs = 10; // Intervalo en milisegundos para intentos
 
 // Función para obtener la hora actual en Madrid
@@ -17,55 +17,53 @@ const getCurrentTimeInMadrid = () => {
     return madridTime.toTimeString().split(' ')[0].slice(0, 5);
 };
 
-// Inicializar el cliente una sola vez
-let client;
-if (!client) {
-    client = new Client();
+// Inicializar el cliente
+const client = new Client();
 
-    client.on('qr', (qr) => {
-        console.log('Escanea este código QR con WhatsApp para iniciar sesión:');
-        qrcode.generate(qr, { small: true });
-    });
+client.on('qr', (qr) => {
+    console.log('Escanea este código QR con WhatsApp para iniciar sesión:');
+    qrcode.generate(qr, { small: true });
+});
 
-    client.on('ready', () => {
-        console.log('Cliente listo. Buscando el grupo...');
-        const checkTime = () => {
-            const currentTime = getCurrentTimeInMadrid();
-            return currentTime >= scheduledTime;
-        };
+client.on('ready', () => {
+    console.log('Cliente listo. Buscando el grupo...');
 
-        const sendMessage = async () => {
-            try {
-                const chats = await client.getChats();
-                const group = chats.find(chat => chat.name === groupName);
+    const checkTime = () => {
+        const currentTime = getCurrentTimeInMadrid();
+        return currentTime >= scheduledTime;
+    };
 
-                if (group) {
-                    console.log(`Grupo encontrado: ${groupName}`);
-                    await group.sendMessage(message);
-                    console.log('Mensaje enviado con éxito.');
-                    clearInterval(intervalId);
-                } else {
-                    console.log('Grupo no encontrado. Intentando de nuevo...');
-                }
-            } catch (error) {
-                console.error('Error al enviar el mensaje:', error);
+    const sendMessage = async () => {
+        try {
+            const chats = await client.getChats();
+            const group = chats.find(chat => chat.name === groupName);
+
+            if (group) {
+                console.log(`Grupo encontrado: ${groupName}`);
+                await group.sendMessage(message);
+                console.log('Mensaje enviado con éxito.');
+                clearInterval(intervalId);
+            } else {
+                console.log('Grupo no encontrado. Intentando de nuevo...');
             }
-        };
+        } catch (error) {
+            console.error('Error al enviar el mensaje:', error);
+        }
+    };
 
-        const intervalId = setInterval(() => {
-            if (checkTime()) {
-                sendMessage();
-            }
-        }, intervalMs);
-    });
+    const intervalId = setInterval(() => {
+        if (checkTime()) {
+            sendMessage();
+        }
+    }, intervalMs);
+});
 
-    client.on('auth_failure', (msg) => {
-        console.error('Error de autenticación:', msg);
-    });
+client.on('auth_failure', (msg) => {
+    console.error('Error de autenticación:', msg);
+});
 
-    client.on('disconnected', (reason) => {
-        console.log('Cliente desconectado:', reason);
-    });
+client.on('disconnected', (reason) => {
+    console.log('Cliente desconectado:', reason);
+});
 
-    client.initialize();
-}
+client.initialize();
