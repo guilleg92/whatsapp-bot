@@ -36,7 +36,7 @@ client.on('ready', () => {
     };
 
     // Programar el mensaje para una hora específica
-    const scheduleTime = '12:55';  // Define la hora en formato HH:mm
+    const scheduleTime = '13:00';  // Define la hora en formato HH:mm
 
     schedule.scheduleJob(scheduleTime, async () => {
         let success = false;
