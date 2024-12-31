@@ -1,42 +1,65 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const puppeteer = require('puppeteer');
-const schedule = require('node-schedule');  // Para programar el envío de mensajes
+const schedule = require('node-schedule');
+const qrcode = require('qrcode-terminal');
 
-// Configura el cliente de WhatsApp con LocalAuth para la autenticación persistente
 const client = new Client({
-    authStrategy: new LocalAuth(),  // Usar LocalAuth para guardar la sesión
+    authStrategy: new LocalAuth(),
     puppeteer: {
-        headless: true,  // No se abre el navegador
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--window-size=1920x1080'
-        ]
+        headless: true
     }
 });
 
-// Evento para recibir el código QR cuando el bot no está autenticado
 client.on('qr', (qr) => {
-    console.log('QR recibido:', qr);
-    // Puedes usar este QR para escanearlo la primera vez desde los logs de Render
+    // Genera el código QR para escanear
+    qrcode.generate(qr, { small: true });
+    console.log('Escanea el QR para iniciar sesión');
 });
 
-// Evento cuando el cliente está listo (conectado y autenticado)
 client.on('ready', () => {
-    console.log('Cliente listo!');
+    console.log('Cliente listo. Buscando el grupo...');
     
-    // Define la hora de envío (por ejemplo, 12:30) usando cron para node-schedule
-    const sendTime = '50 12 * * *';  // Todos los días a las 12:30 (hora del servidor)
+    // Reemplaza "Prueba" con el nombre de tu grupo
+    const groupName = 'Prueba';
+    const message = 'Mensaje de prueba';
     
-    // Programar el envío del mensaje
-    schedule.scheduleJob(sendTime, function() {
-        // Aquí pones el número de grupo o número de contacto al que deseas enviar el mensaje
-        const groupName = 'Prueba';  // Nombre del grupo al que enviar el mensaje
-        const message = '¡Mensaje de prueba!';  // Mensaje que quieres enviar
+    // Función para enviar el mensaje
+    const sendMessage = async () => {
+        const chat = await client.getChats();
+        const group = chat.find((c) => c.name === groupName);
+        
+        if (group) {
+            group.sendMessage(message);
+            console.log(`Mensaje enviado a ${groupName}: "${message}"`);
+            return true;
+        }
+        return false;
+    };
 
-        // Buscar el grupo por nombre y enviar el mensaje
-        client.getChats().then(chats => {
-            const group = chats.find(chat => chat.name === groupName);
-            if (group
+    // Programar el mensaje para una hora específica
+    const scheduleTime = '12:55';  // Define la hora en formato HH:mm
+
+    schedule.scheduleJob(scheduleTime, async () => {
+        let success = false;
+        
+        // Intentar enviar el mensaje varias veces hasta que se logre
+        while (!success) {
+            success = await sendMessage();
+            if (!success) {
+                console.log('Intentando nuevamente...');
+                await new Promise(resolve => setTimeout(resolve, 1000));  // Espera de 1 segundo
+            }
+        }
+        console.log('Mensaje enviado con éxito!');
+        client.destroy();  // Detener el bot después de enviar el mensaje
+    });
+});
+
+client.on('auth_failure', () => {
+    console.log('Autenticación fallida. Por favor, escanea el código QR nuevamente.');
+});
+
+client.on('disconnected', () => {
+    console.log('Cliente desconectado.');
+});
+
+client.initialize();
