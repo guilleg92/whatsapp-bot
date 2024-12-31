@@ -1,67 +1,42 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const moment = require('moment-timezone');
+const puppeteer = require('puppeteer');
+const schedule = require('node-schedule');  // Para programar el envío de mensajes
 
-// Definir el grupo y el mensaje
-const groupName = 'Prueba';
-const message = 'Mensaje de Prueba';
-
-// Hora en la que se debe enviar el mensaje (en formato HH:mm, hora de Madrid)
-const targetTime = '12:50';
-
-// Usar la zona horaria de Madrid
-moment.tz.setDefault("Europe/Madrid");
-
+// Configura el cliente de WhatsApp con LocalAuth para la autenticación persistente
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth(),  // Usar LocalAuth para guardar la sesión
     puppeteer: {
-        headless: true, // Asegúrate de que Puppeteer se ejecute en modo headless
+        headless: true,  // No se abre el navegador
         args: [
-            '--no-sandbox',  // Soluciona problemas de seguridad en entornos sin cabeza
-            '--disable-setuid-sandbox', // Para entornos como servidores
-            '--disable-dev-shm-usage', // Evita problemas de memoria
-            '--disable-gpu', // Desactiva la aceleración de hardware
-            '--window-size=1920x1080' // Define el tamaño de la ventana (necesario en algunos entornos)
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--window-size=1920x1080'
         ]
     }
 });
 
+// Evento para recibir el código QR cuando el bot no está autenticado
 client.on('qr', (qr) => {
-    console.log('QR recibido', qr);
-    // El QR debe ser escaneado por ti para autenticar la sesión
+    console.log('QR recibido:', qr);
+    // Puedes usar este QR para escanearlo la primera vez desde los logs de Render
 });
 
-client.on('ready', async () => {
-    console.log('Cliente listo. Buscando el grupo...');
+// Evento cuando el cliente está listo (conectado y autenticado)
+client.on('ready', () => {
+    console.log('Cliente listo!');
     
-    // Obtener el grupo
-    const chats = await client.getChats();
-    const group = chats.find(chat => chat.name === groupName);
+    // Define la hora de envío (por ejemplo, 12:30) usando cron para node-schedule
+    const sendTime = '30 12 * * *';  // Todos los días a las 12:30 (hora del servidor)
     
-    if (group) {
-        console.log(`Grupo encontrado: ${groupName}`);
-        
-        // Función que verifica la hora actual y envía el mensaje si es la hora correcta
-        const checkTimeAndSend = async () => {
-            const currentTime = moment.tz('Europe/Madrid').format('HH:mm');
-            console.log(`Hora actual: ${currentTime}`);
-            
-            if (currentTime === targetTime) {
-                console.log('Es la hora correcta para enviar el mensaje.');
-                await group.sendMessage(message);
-                console.log('Mensaje enviado.');
-                clearInterval(intervalId); // Detener el intervalo después de enviar el mensaje
-            }
-        };
-        
-        // Configurar el intervalo para hacer intentos cada 100ms (0.1 segundos)
-        const intervalId = setInterval(checkTimeAndSend, 100); // Realiza intentos cada 100ms
-    } else {
-        console.log(`No se encontró el grupo ${groupName}`);
-    }
-});
+    // Programar el envío del mensaje
+    schedule.scheduleJob(sendTime, function() {
+        // Aquí pones el número de grupo o número de contacto al que deseas enviar el mensaje
+        const groupName = 'Prueba';  // Nombre del grupo al que enviar el mensaje
+        const message = '¡Mensaje de prueba!';  // Mensaje que quieres enviar
 
-client.on('message', (message) => {
-    console.log('Nuevo mensaje:', message.body);
-});
-
-client.initialize();
+        // Buscar el grupo por nombre y enviar el mensaje
+        client.getChats().then(chats => {
+            const group = chats.find(chat => chat.name === groupName);
+            if (group
