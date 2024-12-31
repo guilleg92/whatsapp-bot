@@ -4,7 +4,7 @@ const qrcode = require('qrcode-terminal');
 // Configuración
 const groupName = 'Prueba'; // Nombre del grupo
 const message = 'Mensaje de Prueba'; // Mensaje a enviar
-const scheduledTime = '12:20'; // Hora en formato HH:MM (hora de Madrid)
+const scheduledTime = '12:30'; // Hora en formato HH:MM (hora de Madrid)
 const intervalMs = 10; // Intervalo en milisegundos para intentos
 
 // Función para obtener la hora actual en Madrid
