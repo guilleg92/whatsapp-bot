@@ -1,12 +1,4 @@
-{
-  "name": "whatsapp-bot",
-  "version": "1.0.0",
-  "main": "bot.js",
-  "scripts": {
-    "start": "node bot.js"
-  },
-  "dependencies": {
-    "whatsapp-web.js": "^1.18.0",
-    "qrcode-terminal": "^0.12.0"
-  }
+"scripts": {
+  "start": "node bot.js",
+  "server": "node -e 'require(\"http\").createServer((_, res) => res.end(\"OK\")).listen(process.env.PORT || 3000)'"
 }
