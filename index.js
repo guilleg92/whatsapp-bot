@@ -1,54 +1,80 @@
-const qrcode = require('qrcode-terminal');
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const QRCode = require('qrcode-terminal');
+const Redis = require('ioredis');
 
-// Cargar datos de la sesión desde la variable de entorno
-let sessionData = process.env.WHATSAPP_SESSION && process.env.WHATSAPP_SESSION !== '{}' 
-    ? JSON.parse(process.env.WHATSAPP_SESSION) 
-    : null;
+// Configuración de Redis
+const redis = new Redis(process.env.REDIS_URL);
 
-// Configurar cliente de WhatsApp
-const client = new Client({
-    authStrategy: sessionData ? null : new LocalAuth(),
-    session: sessionData || undefined,
-});
+const groupName = process.env.GROUP_NAME || 'prueba';
+const targetHour = process.env.TARGET_HOUR || '13:00:00';
+const messageContent = process.env.MESSAGE_CONTENT || '¡Hola, este es un mensaje automático!';
+const timeZone = 'Europe/Madrid';
 
-client.on('qr', (qr) => {
-    console.log('Escanea este código QR para iniciar sesión:');
-    qrcode.generate(qr, { small: true });
-});
+let sessionData;
 
-client.on('authenticated', (session) => {
+// Recuperar la sesión desde Redis
+async function loadSession() {
+    const session = await redis.get('whatsapp-session');
     if (session) {
-        console.log('Sesión autenticada. Actualiza la variable de entorno con esta sesión:');
-        console.log(JSON.stringify(session)); // Mostrar el JSON de la sesión
-        sessionData = session; // Guardar sesión en memoria
-    } else {
-        console.error('Sesión autenticada, pero no se recibieron datos de la sesión.');
+        console.log('Sesión recuperada desde Redis.');
+        return JSON.parse(session);
     }
-});
+    console.log('No se encontró sesión almacenada.');
+    return null;
+}
 
-client.on('auth_failure', (msg) => {
-    console.error('Error de autenticación:', msg);
-});
+// Guardar la sesión en Redis
+async function saveSession(session) {
+    console.log('Guardando sesión en Redis...');
+    await redis.set('whatsapp-session', JSON.stringify(session));
+    console.log('Sesión guardada correctamente.');
+}
 
-client.on('ready', () => {
-    console.log('Cliente listo. Bot iniciado correctamente.');
-    startBot(); // Iniciar el bot una vez que el cliente esté listo
-});
+// Inicializar cliente de WhatsApp
+async function initializeClient() {
+    const savedSession = await loadSession();
 
-// Configuración del bot
-const groupName = process.env.GROUP_NAME || 'Nombre del Grupo'; // Nombre del grupo
-const messageContent = process.env.MESSAGE_CONTENT || 'Mensaje predeterminado'; // Contenido del mensaje
-const targetHour = process.env.TARGET_HOUR || '13:00'; // Hora objetivo en formato HH:mm
-const timeZone = 'Europe/Madrid'; // Zona horaria
+    const client = new Client({
+        authStrategy: new LocalAuth({
+            dataPath: './.wwebjs_auth',
+            session: savedSession, // Cargar sesión si existe
+        }),
+        puppeteer: {
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        },
+    });
 
-// Función principal del bot
-function startBot() {
+    client.on('qr', (qr) => {
+        console.log('Escanea este código QR para iniciar sesión:');
+        QRCode.generate(qr, { small: true });
+    });
+
+    client.on('authenticated', (session) => {
+        console.log('Sesión autenticada.');
+        sessionData = session;
+        saveSession(session);
+    });
+
+    client.on('ready', () => {
+        console.log('Cliente listo. Bot iniciado correctamente.');
+        startBot(client);
+    });
+
+    client.on('auth_failure', () => {
+        console.error('Error de autenticación. Por favor, escanea el QR nuevamente.');
+    });
+
+    client.initialize();
+}
+
+function startBot(client) {
     console.log(`Buscando el grupo: ${groupName}`);
     client.getChats().then((chats) => {
-        const groupChat = chats.find((chat) => chat.name === groupName);
+        const groupChat = chats.find((chat) => chat.name.trim() === groupName.trim());
         if (!groupChat) {
-            console.error(`Grupo "${groupName}" no encontrado. Verifica el nombre.`);
+            console.error(`Grupo "${groupName}" no encontrado. Verifica el nombre en la variable GROUP_NAME.`);
+            console.log('Grupos disponibles:');
+            chats.filter(chat => chat.isGroup).forEach(chat => console.log(`- ${chat.name}`));
             return;
         }
         console.log(`Grupo "${groupName}" encontrado. Esperando la hora ${targetHour} para enviar el mensaje.`);
@@ -73,4 +99,4 @@ function startBot() {
 }
 
 // Iniciar cliente
-client.initialize();
+initializeClient();
