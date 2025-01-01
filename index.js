@@ -1,7 +1,8 @@
 const { Client, RemoteAuth } = require('whatsapp-web.js');
+const RedisStore = require('whatsapp-web.js/src/authStrategies/Stores/RedisStore');
 const { createClient } = require('redis');
-const { RedisStore } = require('whatsapp-web.js');
 const moment = require('moment-timezone');
+const fs = require('fs');
 const config = require('./config.json');
 
 // Configuración de Redis
@@ -24,17 +25,14 @@ const client = new Client({
   restartOnAuthFail: true
 });
 
-// Variables de configuración
-const { groupName, message, scheduledTime } = config;
-
-// Función principal
+// Eventos del cliente de WhatsApp
 client.on('qr', (qr) => {
-  console.log('Escanea el código QR para iniciar sesión:', qr);
+  console.log('Escanea este código QR para iniciar sesión:', qr);
 });
 
 client.on('ready', () => {
   console.log('¡Bot listo y autenticado!');
-  programarEnvio();
+  startMessageSendingProcess();
 });
 
 client.on('authenticated', () => {
@@ -42,73 +40,70 @@ client.on('authenticated', () => {
 });
 
 client.on('auth_failure', () => {
-  console.error('Fallo en la autenticación. Por favor, reinicia el bot.');
+  console.error('Fallo en la autenticación. Por favor, reinicia el bot y escanea el QR nuevamente.');
 });
 
 client.on('disconnected', (reason) => {
-  console.error('Cliente desconectado:', reason);
-  console.log('Reiniciando cliente...');
-  client.initialize();
+  console.error('El cliente se desconectó. Razón:', reason);
 });
 
-// Programar el envío del mensaje
-function programarEnvio() {
-  const now = moment.tz('Europe/Madrid');
-  const targetTime = moment.tz(scheduledTime, 'HH:mm', 'Europe/Madrid');
-
-  if (now.isAfter(targetTime)) {
-    console.log('La hora programada ya pasó. Revisa la configuración.');
-    return;
-  }
-
-  const delay = targetTime.diff(now, 'milliseconds');
-  console.log(`Esperando hasta las ${targetTime.format('HH:mm')} para enviar el mensaje...`);
-
-  setTimeout(() => verificarGrupoYEnviar(), delay);
-}
-
-// Verificar grupo y enviar mensaje
-async function verificarGrupoYEnviar() {
+// Función para enviar mensajes al grupo
+async function sendMessageToGroup(groupName, message) {
   try {
     const chats = await client.getChats();
     const group = chats.find(chat => chat.name === groupName);
 
-    if (!group) {
+    if (group) {
+      console.log(`Grupo encontrado: ${groupName}`);
+      await group.sendMessage(message);
+      console.log(`Mensaje enviado exitosamente a las ${moment().format('HH:mm:ss')}`);
+    } else {
       console.error(`No se encontró el grupo: ${groupName}`);
-      return;
     }
-
-    console.log(`Grupo encontrado: ${groupName}`);
-    console.log('Esperando que el grupo esté habilitado para escribir...');
-
-    let enviado = false;
-    let intentos = 0;
-
-    const intervalo = setInterval(async () => {
-      try {
-        intentos++;
-        console.log(`Intento #${intentos}: Verificando permisos para escribir...`);
-
-        await group.sendMessage(message);
-        console.log(`Mensaje enviado exitosamente a las ${moment().format('HH:mm:ss')}`);
-        enviado = true;
-        clearInterval(intervalo);
-      } catch (error) {
-        if (!error.message.includes('write')) {
-          console.error('Error inesperado:', error);
-          clearInterval(intervalo);
-        }
-      }
-    }, 500);
-  } catch (error) {
-    console.error('Error al verificar el grupo o enviar el mensaje:', error);
+  } catch (err) {
+    console.error('Error al enviar el mensaje:', err);
   }
 }
 
-// Inicializar el cliente
+// Función principal para el proceso de envío de mensajes
+function startMessageSendingProcess() {
+  const groupName = config.groupName;
+  const message = config.message;
+  const targetTime = moment.tz(config.scheduledTime, 'Europe/Madrid');
+
+  const interval = setInterval(async () => {
+    const now = moment.tz('Europe/Madrid');
+    console.log(`Hora actual: ${now.format('HH:mm:ss')}. Esperando la hora: ${targetTime.format('HH:mm:ss')}`);
+
+    if (now.isSameOrAfter(targetTime)) {
+      console.log('¡Hora de enviar el mensaje! Verificando si el grupo está abierto...');
+      try {
+        const chats = await client.getChats();
+        const group = chats.find(chat => chat.name === groupName);
+
+        if (group && group.isGroup) {
+          const canSendMessages = !group.isRestricted; // Verificar si el grupo permite mensajes
+          if (canSendMessages) {
+            console.log('El grupo está abierto para mensajes. Intentando enviar...');
+            await sendMessageToGroup(groupName, message);
+            clearInterval(interval); // Detener el proceso tras enviar el mensaje
+          } else {
+            console.log('El grupo aún está bloqueado para enviar mensajes.');
+          }
+        } else {
+          console.error('No se encontró el grupo o no es un grupo válido.');
+        }
+      } catch (err) {
+        console.error('Error al verificar el grupo:', err);
+      }
+    }
+  }, 500); // Intentos cada 0.5 segundos
+}
+
+// Inicializar cliente
 client.initialize();
 
-// Servidor HTTP necesario para Render
+// Crear un servidor HTTP para Render
 const http = require('http');
 const port = process.env.PORT || 3000;
 
@@ -116,5 +111,5 @@ http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Bot is running');
 }).listen(port, () => {
-  console.log(`Bot está escuchando en el puerto ${port}`);
+  console.log(`Servidor HTTP activo en el puerto ${port}`);
 });
