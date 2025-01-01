@@ -1,16 +1,21 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "Bot para enviar un mensaje al grupo de WhatsApp automáticamente",
-  "main": "src/index.js",
+  "description": "Bot para enviar un mensaje automáticamente en un grupo de WhatsApp",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.18.0",
+    "whatsapp-web.js": "^1.17.1",
     "qrcode-terminal": "^0.12.0",
-    "redis": "^4.0.0",
+    "redis": "^4.2.0",
     "moment-timezone": "^0.5.34",
-    "cron": "^2.1.0"
-  }
+    "node-cron": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "",
+  "license": "MIT"
 }
