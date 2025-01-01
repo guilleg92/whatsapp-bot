@@ -1,39 +1,35 @@
-// Suprimir las advertencias de deprecación
-process.removeAllListeners('warning');
-
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const redis = require('redis');
-const fs = require('fs');
+const { Client, RemoteAuth } = require('whatsapp-web.js');
+const { createClient } = require('redis');
 const moment = require('moment-timezone');
 const config = require('./config.json');
 
-// Conexión a Redis
-const redisClient = redis.createClient({
+// Configuración de Redis
+const redisClient = createClient({
   url: 'redis://red-ctqi1hbtq21c73a1s6ug:6379'
 });
-redisClient.connect()
-  .then(() => {
-    console.log('Conectado a Redis');
-  })
-  .catch((err) => {
-    console.error('Error de conexión a Redis:', err);
-  });
 
-// Crear el cliente de WhatsApp con autenticación local (usando Redis para la sesión)
+redisClient.connect()
+  .then(() => console.log('Conectado a Redis'))
+  .catch((err) => console.error('Error al conectar a Redis:', err));
+
+// Crear cliente de WhatsApp
 const client = new Client({
-  authStrategy: new LocalAuth(),  // Utiliza LocalAuth para guardar la sesión
-  puppeteer: { headless: true },  // Ejecuta el navegador en modo headless
-  restartOnAuthFail: true  // Reinicia el cliente si la autenticación falla
+  authStrategy: new RemoteAuth({ client: redisClient }),
+  puppeteer: { headless: true },
+  restartOnAuthFail: true
 });
 
-// Manejo de eventos del cliente de WhatsApp
+// Variables de configuración
+const { groupName, message, scheduledTime } = config;
+
+// Función principal
 client.on('qr', (qr) => {
-  console.log('Escanea el código QR con tu WhatsApp:', qr);
+  console.log('Escanea el código QR para iniciar sesión:', qr);
 });
 
 client.on('ready', () => {
-  console.log('¡Bot está listo y autenticado!');
-  sendMessageAtScheduledTime();  // Ahora que el bot está listo, podemos enviar el mensaje
+  console.log('¡Bot listo y autenticado!');
+  programarEnvio();
 });
 
 client.on('authenticated', () => {
@@ -41,61 +37,79 @@ client.on('authenticated', () => {
 });
 
 client.on('auth_failure', () => {
-  console.log('Fallo en la autenticación. Intenta escanear el QR nuevamente.');
+  console.error('Fallo en la autenticación. Por favor, reinicia el bot.');
 });
 
-client.on('message', (msg) => {
-  if (msg.body === '¡Hola!') {
-    msg.reply('¡Hola, cómo estás!');
-  }
+client.on('disconnected', (reason) => {
+  console.error('Cliente desconectado:', reason);
+  console.log('Reiniciando cliente...');
+  client.initialize();
 });
 
-// Función para enviar el mensaje a la hora programada
-function sendMessageAtScheduledTime() {
-  const now = moment.tz("Europe/Madrid");
-  const targetTime = moment.tz(config.scheduledTime, "Europe/Madrid");
-  const groupName = config.groupName;
-  const message = config.message;
+// Programar el envío del mensaje
+function programarEnvio() {
+  const now = moment.tz('Europe/Madrid');
+  const targetTime = moment.tz(scheduledTime, 'HH:mm', 'Europe/Madrid');
 
-  if (now.isBefore(targetTime)) {
-    const delay = targetTime.diff(now, 'milliseconds');
-    console.log(`Esperando hasta las ${targetTime.format('HH:mm')} para enviar el mensaje...`);
-    setTimeout(() => {
-      sendMessage(groupName, message);
-    }, delay);
-  } else {
-    sendMessage(groupName, message);
+  if (now.isAfter(targetTime)) {
+    console.log('La hora programada ya pasó. Revisa la configuración.');
+    return;
   }
+
+  const delay = targetTime.diff(now, 'milliseconds');
+  console.log(`Esperando hasta las ${targetTime.format('HH:mm')} para enviar el mensaje...`);
+
+  setTimeout(() => verificarGrupoYEnviar(), delay);
 }
 
-// Función para enviar el mensaje al grupo
-async function sendMessage(groupName, message) {
+// Verificar grupo y enviar mensaje
+async function verificarGrupoYEnviar() {
   try {
     const chats = await client.getChats();
     const group = chats.find(chat => chat.name === groupName);
 
-    if (group) {
-      console.log(`Grupo encontrado: ${groupName}`);
-      await group.sendMessage(message);
-      console.log(`Mensaje enviado a las ${moment().format('HH:mm')}`);
-    } else {
-      console.log(`No se encontró el grupo: ${groupName}`);
+    if (!group) {
+      console.error(`No se encontró el grupo: ${groupName}`);
+      return;
     }
+
+    console.log(`Grupo encontrado: ${groupName}`);
+    console.log('Esperando que el grupo esté habilitado para escribir...');
+
+    let enviado = false;
+    let intentos = 0;
+
+    const intervalo = setInterval(async () => {
+      try {
+        intentos++;
+        console.log(`Intento #${intentos}: Verificando permisos para escribir...`);
+
+        await group.sendMessage(message);
+        console.log(`Mensaje enviado exitosamente a las ${moment().format('HH:mm:ss')}`);
+        enviado = true;
+        clearInterval(intervalo);
+      } catch (error) {
+        if (!error.message.includes('write')) {
+          console.error('Error inesperado:', error);
+          clearInterval(intervalo);
+        }
+      }
+    }, 500);
   } catch (error) {
-    console.error('Error al enviar el mensaje:', error);
+    console.error('Error al verificar el grupo o enviar el mensaje:', error);
   }
 }
 
-// Inicializar el cliente de WhatsApp
+// Inicializar el cliente
 client.initialize();
 
-// Crear un servidor HTTP para Render (necesario para detectar el puerto)
+// Servidor HTTP necesario para Render
 const http = require('http');
-const port = process.env.PORT || 3000;  // Usa el puerto proporcionado por Render o el puerto 3000 por defecto
+const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Bot is running');
 }).listen(port, () => {
-  console.log(`Bot is listening on port ${port}`);
+  console.log(`Bot está escuchando en el puerto ${port}`);
 });
