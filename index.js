@@ -4,6 +4,10 @@ const express = require('express');
 const redis = require('redis');
 const { CronJob } = require('cron');
 const moment = require('moment-timezone');
+const fs = require('fs');
+
+// Cargar la configuración desde el archivo config.json
+const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
 
 // Configuración de Redis para guardar la sesión
 const redisClient = redis.createClient({ url: 'redis://localhost:6379' });
@@ -16,11 +20,6 @@ const whatsappClient = new Client({
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   },
 });
-
-// Configuración del grupo y mensaje (estos parámetros pueden ser editados cada día)
-let groupName = 'Nombre del grupo'; // Cambia este valor según sea necesario
-let messageContent = 'Mensaje automático del bot';
-let scheduledTime = '13:00'; // Hora de envío en formato HH:mm (hora Madrid)
 
 // Inicia el cliente de WhatsApp
 whatsappClient.on('qr', (qr) => {
@@ -41,7 +40,7 @@ whatsappClient.initialize();
 // Función para enviar el mensaje cuando sea posible
 const sendMessage = () => {
   whatsappClient.getChats().then((chats) => {
-    const group = chats.find((chat) => chat.name === groupName);
+    const group = chats.find((chat) => chat.name === config.groupName);
 
     if (group && group.isGroup) {
       console.log('Grupo encontrado. Intentando enviar el mensaje...');
@@ -53,22 +52,22 @@ const sendMessage = () => {
 
         // Si el grupo está habilitado para enviar mensajes, envía el mensaje
         if (group.isOpen) {
-          group.sendMessage(messageContent);
-          console.log(`Mensaje enviado al grupo ${groupName} a las ${moment().format('HH:mm:ss')}`);
+          group.sendMessage(config.messageContent);
+          console.log(`Mensaje enviado al grupo ${config.groupName} a las ${moment().format('HH:mm:ss')}`);
           clearInterval(interval);
         } else {
           console.log(`Intento ${attempts}: El grupo está bloqueado. Intentando nuevamente...`);
         }
       }, 500);
     } else {
-      console.log(`Grupo ${groupName} no encontrado.`);
+      console.log(`Grupo ${config.groupName} no encontrado.`);
     }
   });
 };
 
 // Tarea programada para enviar el mensaje a la hora determinada
-const job = new CronJob(`0 13 * * *`, () => {
-  console.log(`Buscando el grupo a las ${scheduledTime}...`);
+const job = new CronJob(`0 ${config.scheduledTime.split(':')[1]} ${config.scheduledTime.split(':')[0]} * * *`, () => {
+  console.log(`Buscando el grupo a las ${config.scheduledTime}...`);
   sendMessage();
 }, null, true, 'Europe/Madrid');
 
@@ -77,3 +76,4 @@ const app = express();
 app.listen(3000, () => {
   console.log('Servidor corriendo en el puerto 3000');
 });
+
