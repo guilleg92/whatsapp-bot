@@ -1,75 +1,100 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const fs = require('fs');
 const qrcode = require('qrcode-terminal');
-const moment = require('moment-timezone'); // Importar moment-timezone
-const config = require('./config.json'); // Cargar configuración del grupo, mensaje y hora
+const moment = require('moment-timezone');
+const fs = require('fs');
 
-let client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: { headless: true } // Ejecutar sin abrir una ventana de navegador
-});
+// Cargar la configuración desde config.json
+const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 
-client.on('qr', (qr) => {
-    console.log('Escanea el código QR');
-    qrcode.generate(qr, { small: true });
-});
+// Variables globales
+let client;
 
-client.on('authenticated', () => {
-    console.log('Autenticado correctamente');
-});
-
-client.on('ready', () => {
-    console.log('El bot está listo');
-
-    // Obtener configuración del archivo config.json
-    const groupName = config.groupName;
-    const message = config.message;
-    const sendTimeString = config.sendTime; // Hora en formato hh:mm
-    const sendTime = moment.tz(sendTimeString, "HH:mm", "Europe/Madrid").toDate(); // Convertir a hora de Madrid
-
-    const currentTime = new Date();
-
-    // Verificar si es el momento de enviar el mensaje
-    if (sendTime > currentTime) {
-        console.log(`Esperando hasta las ${sendTime.toLocaleString()} para enviar el mensaje...`);
-    } else {
-        console.log('La hora ya ha pasado. Enviando el mensaje ahora...');
-        sendMessage();
-    }
-
-    // Función para enviar el mensaje al grupo
-    function sendMessage() {
-        let group;
-
-        // Buscar el grupo de WhatsApp
-        client.getChats().then(chats => {
-            group = chats.find(chat => chat.name === groupName);
-            if (group) {
-                console.log(`Grupo encontrado: ${groupName}`);
-                checkGroupAndSend(group);
-            } else {
-                console.log(`No se ha encontrado el grupo: ${groupName}`);
-            }
-        });
-
-        // Función para verificar si el grupo permite escribir y enviar el mensaje
-        function checkGroupAndSend(group) {
-            let attempts = 0;
-            const interval = setInterval(() => {
-                attempts++;
-                console.log(`Intento ${attempts}: Verificando si el grupo permite escribir...`);
-
-                if (group.isReadOnly) {
-                    console.log('El grupo está bloqueado para escribir, esperando...');
-                } else {
-                    console.log('El grupo está abierto para escribir. Enviando mensaje...');
-                    group.sendMessage(message);
-                    console.log(`Mensaje enviado a ${groupName} a las ${new Date().toLocaleString()}`);
-                    clearInterval(interval); // Detener los intentos una vez que el mensaje se haya enviado
-                }
-            }, 500); // Verificar cada 0.5 segundos
+// Función para iniciar sesión y manejar la autenticación
+function startBot() {
+    client = new Client({
+        authStrategy: new LocalAuth(),
+        puppeteer: {
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         }
-    }
-});
+    });
 
-client.init
+    client.on('qr', (qr) => {
+        console.log('Escanea el código QR');
+        qrcode.generate(qr, { small: true });
+    });
+
+    client.on('authenticated', () => {
+        console.log('Autenticado correctamente');
+    });
+
+    client.on('ready', () => {
+        console.log('El bot está listo');
+        monitorGroup();
+    });
+
+    client.on('message', (message) => {
+        // Si el bot recibe un mensaje, no hacer nada
+    });
+
+    client.initialize();
+}
+
+// Función para verificar si el grupo está habilitado para escribir
+async function isGroupOpen(groupName) {
+    const chat = await client.getChats();
+    const group = chat.find((g) => g.name === groupName);
+    if (group) {
+        return group.isGroup && group.isLocked === false; // Si el grupo está desbloqueado
+    }
+    return false;
+}
+
+// Función para enviar el mensaje
+async function sendMessage(groupName, messageContent) {
+    const chat = await client.getChats();
+    const group = chat.find((g) => g.name === groupName);
+    if (group && !group.isLocked) {
+        group.sendMessage(messageContent);
+        console.log(`Mensaje enviado: ${messageContent}`);
+    }
+}
+
+// Función para verificar la hora y enviar el mensaje
+function checkTimeAndSend() {
+    const now = moment().tz('Europe/Madrid');
+    const targetTime = moment(config.time, 'HH:mm').tz('Europe/Madrid');
+    console.log(`Hora actual: ${now.format('HH:mm')}`);
+    console.log(`Hora objetivo: ${targetTime.format('HH:mm')}`);
+
+    if (now.isSameOrAfter(targetTime)) {
+        // Si la hora objetivo ya pasó, intentar enviar el mensaje
+        console.log('Es hora de intentar enviar el mensaje');
+        trySendingMessage();
+    } else {
+        console.log('Aún no es la hora de enviar el mensaje');
+    }
+}
+
+// Función para intentar enviar el mensaje cada 0.5 segundos hasta que se habilite el grupo
+async function trySendingMessage() {
+    const groupName = config.groupName;
+    const messageContent = config.message;
+
+    let attempts = 0;
+    const interval = setInterval(async () => {
+        attempts++;
+        console.log(`Intento ${attempts}`);
+        const groupOpen = await isGroupOpen(groupName);
+        if (groupOpen) {
+            await sendMessage(groupName, messageContent);
+            clearInterval(interval); // Detener los intentos una vez enviado el mensaje
+        }
+    }, 500);
+}
+
+// Comenzar el bot
+startBot();
+
+// Verificar la hora cada minuto
+setInterval(checkTimeAndSend, 60000);
