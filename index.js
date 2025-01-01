@@ -9,7 +9,10 @@ const targetTime = process.env.TARGET_TIME || '12:00'; // Hora en formato HH:mm
 const timezone = 'Europe/Madrid';
 
 // Variables para la sesión
-let sessionData = process.env.WHATSAPP_SESSION ? JSON.parse(process.env.WHATSAPP_SESSION) : null;
+let sessionData = process.env.WHATSAPP_SESSION && process.env.WHATSAPP_SESSION !== '{}' 
+    ? JSON.parse(process.env.WHATSAPP_SESSION) 
+    : null;
+
 
 // Inicializar cliente de WhatsApp
 const client = new Client({
