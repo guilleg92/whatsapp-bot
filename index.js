@@ -8,7 +8,7 @@ const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 
 // Crear el cliente de WhatsApp con autenticación local
 const client = new Client({
-    authStrategy: new LocalAuth()
+    authStrategy: new LocalAuth()  // Usamos LocalAuth para guardar la sesión
 });
 
 // Mostrar el código QR cuando no está autenticado
@@ -21,6 +21,13 @@ client.on('qr', (qr) => {
 client.on('ready', async () => {
     console.log('¡Autenticado correctamente!');
 
+    // Buscar el grupo primero
+    const chat = await findGroup(config.groupName);
+    if (!chat) {
+        console.log(`No se encontró el grupo ${config.groupName}`);
+        return;
+    }
+
     // Obtener la hora actual en Madrid
     const now = moment().tz('Europe/Madrid');
     console.log(`Hora actual en Madrid: ${now.format('HH:mm')}`);
@@ -29,16 +36,9 @@ client.on('ready', async () => {
     const targetTime = moment(config.time, 'HH:mm').tz('Europe/Madrid');
     console.log(`Hora objetivo: ${targetTime.format('HH:mm')}`);
 
-    // Si aún no es la hora de enviar el mensaje
+    // Verificar si aún no es la hora de enviar el mensaje
     if (now.isBefore(targetTime)) {
         console.log('Aún no es la hora de enviar el mensaje');
-        return;
-    }
-
-    // Buscar el grupo
-    const chat = await findGroup(config.groupName);
-    if (!chat) {
-        console.log(`No se encontró el grupo ${config.groupName}`);
         return;
     }
 
