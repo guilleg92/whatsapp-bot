@@ -1,6 +1,7 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const fs = require('fs');
 const qrcode = require('qrcode-terminal');
+const moment = require('moment-timezone'); // Importar moment-timezone
 const config = require('./config.json'); // Cargar configuración del grupo, mensaje y hora
 
 let client = new Client({
@@ -23,7 +24,9 @@ client.on('ready', () => {
     // Obtener configuración del archivo config.json
     const groupName = config.groupName;
     const message = config.message;
-    const sendTime = new Date(config.sendTime); // La hora a la que se enviará el mensaje
+    const sendTimeString = config.sendTime; // Hora en formato hh:mm
+    const sendTime = moment.tz(sendTimeString, "HH:mm", "Europe/Madrid").toDate(); // Convertir a hora de Madrid
+
     const currentTime = new Date();
 
     // Verificar si es el momento de enviar el mensaje
@@ -69,4 +72,4 @@ client.on('ready', () => {
     }
 });
 
-client.initialize();
+client.init
