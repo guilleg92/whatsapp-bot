@@ -1,6 +1,5 @@
 {
-  "group_name": "nombre-del-grupo",
-  "message_content": "¡Este es el mensaje que se enviará a las 13:00!",
-  "target_time": "14:55", 
-  "redis_url": "redis://red-ctqi1hbtq21c73a1s6ug:6379"
+  "groupName": "Prueba",
+  "message": "¡Hola, este es el primer mensaje!",
+  "hourToSend": "15:10"
 }
