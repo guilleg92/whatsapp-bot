@@ -1,11 +1,11 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const fs = require('fs');
 const qrcode = require('qrcode-terminal');
-const config = require('./config.json'); // Para leer la configuración del grupo, mensaje y hora
+const config = require('./config.json'); // Cargar configuración del grupo, mensaje y hora
 
 let client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { headless: true } // Se ejecuta sin abrir una ventana del navegador
+    puppeteer: { headless: true } // Ejecutar sin abrir una ventana de navegador
 });
 
 client.on('qr', (qr) => {
@@ -20,23 +20,53 @@ client.on('authenticated', () => {
 client.on('ready', () => {
     console.log('El bot está listo');
 
-    // Aquí va la lógica de encontrar el grupo, verificar la hora y enviar el mensaje
+    // Obtener configuración del archivo config.json
     const groupName = config.groupName;
     const message = config.message;
-    const sendTime = new Date(config.sendTime);
+    const sendTime = new Date(config.sendTime); // La hora a la que se enviará el mensaje
+    const currentTime = new Date();
 
-    let group;
+    // Verificar si es el momento de enviar el mensaje
+    if (sendTime > currentTime) {
+        console.log(`Esperando hasta las ${sendTime.toLocaleString()} para enviar el mensaje...`);
+    } else {
+        console.log('La hora ya ha pasado. Enviando el mensaje ahora...');
+        sendMessage();
+    }
 
-    client.getChats().then(chats => {
-        group = chats.find(chat => chat.name === groupName);
-        if (group) {
-            console.log(`Grupo encontrado: ${groupName}`);
-        } else {
-            console.log('No se ha encontrado el grupo');
+    // Función para enviar el mensaje al grupo
+    function sendMessage() {
+        let group;
+
+        // Buscar el grupo de WhatsApp
+        client.getChats().then(chats => {
+            group = chats.find(chat => chat.name === groupName);
+            if (group) {
+                console.log(`Grupo encontrado: ${groupName}`);
+                checkGroupAndSend(group);
+            } else {
+                console.log(`No se ha encontrado el grupo: ${groupName}`);
+            }
+        });
+
+        // Función para verificar si el grupo permite escribir y enviar el mensaje
+        function checkGroupAndSend(group) {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                attempts++;
+                console.log(`Intento ${attempts}: Verificando si el grupo permite escribir...`);
+
+                if (group.isReadOnly) {
+                    console.log('El grupo está bloqueado para escribir, esperando...');
+                } else {
+                    console.log('El grupo está abierto para escribir. Enviando mensaje...');
+                    group.sendMessage(message);
+                    console.log(`Mensaje enviado a ${groupName} a las ${new Date().toLocaleString()}`);
+                    clearInterval(interval); // Detener los intentos una vez que el mensaje se haya enviado
+                }
+            }, 500); // Verificar cada 0.5 segundos
         }
-    });
-
-    // Aquí se debería agregar la lógica de espera y envío del mensaje en la hora especificada
+    }
 });
 
 client.initialize();
