@@ -1,5 +1,6 @@
 const { Client, RemoteAuth } = require('whatsapp-web.js');
 const { createClient } = require('redis');
+const { RedisStore } = require('whatsapp-web.js');
 const moment = require('moment-timezone');
 const config = require('./config.json');
 
@@ -15,8 +16,9 @@ redisClient.connect()
 // Crear cliente de WhatsApp
 const client = new Client({
   authStrategy: new RemoteAuth({
+    store: new RedisStore(redisClient), // Configuración del store
     client: redisClient,
-    backupSyncIntervalMs: 60000 // Intervalo de sincronización en milisegundos (mínimo 60,000 ms)
+    backupSyncIntervalMs: 60000 // Intervalo de sincronización en milisegundos
   }),
   puppeteer: { headless: true },
   restartOnAuthFail: true
@@ -116,4 +118,3 @@ http.createServer((req, res) => {
 }).listen(port, () => {
   console.log(`Bot está escuchando en el puerto ${port}`);
 });
-
