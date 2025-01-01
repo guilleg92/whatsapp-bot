@@ -1,5 +1,5 @@
 {
   "groupName": "Prueba",
-  "message": "¡Hola, este es el primer mensaje!",
-  "hourToSend": "16:00"
+  "message": "Mensaje de prueba",
+  "scheduledTime": "16:40"
 }
