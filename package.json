@@ -7,11 +7,11 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.0.0",  // Asegúrate de tener la versión más reciente de whatsapp-web.js
-    "redis": "^4.0.0",  // Asegúrate de tener la versión más reciente de redis
-    "dotenv": "^10.0.0",  // Si no lo tienes ya, puedes usar dotenv para gestionar variables de entorno
-    "qrcode-terminal": "^0.12.0",  // Para mostrar el código QR en la terminal
-    "axios": "^0.21.1"  // Si necesitas realizar solicitudes HTTP, como en el caso de la verificación de la sesión
+    "whatsapp-web.js": "^1.0.0",
+    "redis": "^4.0.0",
+    "dotenv": "^10.0.0",
+    "qrcode-terminal": "^0.12.0",
+    "axios": "^0.21.1"
   },
   "devDependencies": {},
   "engines": {
