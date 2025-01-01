@@ -1,14 +1,17 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "Bot para enviar mensajes en WhatsApp a un grupo específico.",
+  "description": "Bot para enviar el primer mensaje en un grupo de WhatsApp",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.19.5",
-    "moment-timezone": "^0.5.42",
-    "redis": "^4.6.7"
+    "whatsapp-web.js": "^1.18.0",
+    "qrcode-terminal": "^0.12.0",
+    "moment": "^2.29.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
