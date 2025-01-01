@@ -70,9 +70,8 @@ function sendMessageAtScheduledTime() {
 // Función para enviar el mensaje al grupo
 async function sendMessage(groupName, message) {
   try {
-    const group = await client.getChats().then((chats) => {
-      return chats.find(chat => chat.name === groupName);
-    });
+    const chats = await client.getChats();
+    const group = chats.find(chat => chat.name === groupName);
 
     if (group) {
       console.log(`Grupo encontrado: ${groupName}`);
