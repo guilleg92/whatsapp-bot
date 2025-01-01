@@ -21,9 +21,9 @@ redisClient.connect()
 
 // Crear el cliente de WhatsApp con autenticación local (usando Redis para la sesión)
 const client = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: { headless: true },
-  restartOnAuthFail: true
+  authStrategy: new LocalAuth(),  // Utiliza LocalAuth para guardar la sesión
+  puppeteer: { headless: true },  // Ejecuta el navegador en modo headless
+  restartOnAuthFail: true  // Reinicia el cliente si la autenticación falla
 });
 
 // Manejo de eventos del cliente de WhatsApp
