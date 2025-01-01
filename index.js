@@ -14,7 +14,10 @@ redisClient.connect()
 
 // Crear cliente de WhatsApp
 const client = new Client({
-  authStrategy: new RemoteAuth({ client: redisClient }),
+  authStrategy: new RemoteAuth({
+    client: redisClient,
+    backupSyncIntervalMs: 60000 // Intervalo de sincronización en milisegundos (mínimo 60,000 ms)
+  }),
   puppeteer: { headless: true },
   restartOnAuthFail: true
 });
@@ -113,3 +116,4 @@ http.createServer((req, res) => {
 }).listen(port, () => {
   console.log(`Bot está escuchando en el puerto ${port}`);
 });
+
