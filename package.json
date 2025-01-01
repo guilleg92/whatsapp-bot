@@ -1,14 +1,14 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "Bot para enviar mensajes en WhatsApp de forma automática.",
-  "main": "bot.js",
+  "description": "Bot para enviar mensajes rápidamente en un grupo de WhatsApp.",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.20.0",
+    "whatsapp-web.js": "^1.18.4",
     "qrcode-terminal": "^0.12.0",
-    "node-schedule": "^2.1.1"
+    "dotenv": "^16.0.3"
   }
 }
