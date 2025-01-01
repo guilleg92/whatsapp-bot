@@ -1,5 +1,12 @@
 {
-  "groupName": "Prueba",
-  "message": "Mensaje de prueba",
-  "scheduledTime": "16:40"
+  "name": "whatsapp-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.20.0",
+    "redis": "^4.6.7"
+  }
 }
