@@ -1,70 +1,83 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const { Client } = require('whatsapp-web.js');
 const redis = require('redis');
+const fs = require('fs');
 const moment = require('moment-timezone');
-const cron = require('node-cron');
+const config = require('./config.json');
 
-// Configuración de Redis
-const redisClient = redis.createClient({
-    url: process.env.REDIS_URL
-});
+const client = new Client();
 
-redisClient.connect().catch(err => console.log("Error connecting to Redis:", err));
+const redisClient = redis.createClient({ url: config.redis_url });
+redisClient.connect();
 
-// Configuración de WhatsApp Web
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: { headless: true }
-});
-
-// Función para iniciar sesión
-client.on('qr', (qr) => {
-    qrcode.generate(qr, { small: true });
-    console.log('Escanea el QR para iniciar sesión');
-});
-
-client.on('authenticated', () => {
-    console.log('Autenticado correctamente');
-});
-
-client.on('ready', () => {
-    console.log('El bot está listo');
-    startMessageTask();
-});
-
-// Función para enviar el mensaje
-async function sendMessage() {
-    const groupName = process.env.GROUP_NAME;
-    const message = process.env.MESSAGE_CONTENT;
-    const group = await client.getChats().then(chats => {
-        return chats.find(chat => chat.name === groupName);
-    });
-
-    if (group) {
-        console.log('Grupo encontrado, enviando mensaje...');
-        await group.sendMessage(message);
-        console.log(`Mensaje enviado a las ${moment().format('YYYY-MM-DD HH:mm:ss')}`);
+async function initializeSession() {
+    const sessionData = await redisClient.get('whatsapp-session');
+    if (sessionData) {
+        console.log("Sesión autenticada correctamente.");
+        return JSON.parse(sessionData);
     } else {
-        console.log('Grupo no encontrado');
+        console.log("Iniciando sesión por primera vez...");
+        return new Promise((resolve, reject) => {
+            client.on('qr', (qr) => {
+                console.log('Escanea este código QR:', qr);
+                resolve(null);
+            });
+            client.on('authenticated', (session) => {
+                redisClient.set('whatsapp-session', JSON.stringify(session));
+                console.log("Sesión guardada correctamente.");
+                resolve(session);
+            });
+            client.on('auth_failure', (error) => {
+                reject(error);
+            });
+        });
     }
 }
 
-// Función para comprobar si el grupo está abierto y enviar el mensaje
-function startMessageTask() {
-    const targetHour = 13; // Hora objetivo (13:00 Madrid)
+async function sendMessage() {
+    const groupName = config.group_name;
+    const targetTime = config.target_time;  // Ahora tenemos la hora en formato HH:mm
+    const messageContent = config.message_content;
 
-    cron.schedule('*/0.5 * * * * *', async () => {
-        const currentTime = moment().tz('Europe/Madrid').hour();
-        const minute = moment().tz('Europe/Madrid').minute();
+    const currentTime = moment().tz("Europe/Madrid").format('HH:mm');  // Hora actual en formato HH:mm
+    console.log(`Hora actual: ${currentTime}. Hora objetivo: ${targetTime}.`);
 
-        if (currentTime === targetHour && minute === 0) {
-            console.log('¡Hora de enviar el mensaje!');
-            await sendMessage();
+    if (currentTime !== targetTime) {
+        console.log(`Aún no es la hora de enviar el mensaje. Hora objetivo: ${targetTime}. Hora actual: ${currentTime}.`);
+        return;
+    }
+
+    try {
+        const group = await client.getChats().then(chats => chats.find(chat => chat.name === groupName));
+        if (group) {
+            console.log(`Grupo encontrado: ${group.name}. Intentando enviar el mensaje...`);
+            let attempts = 0;
+
+            const interval = setInterval(async () => {
+                attempts++;
+                const canSendMessage = group.isOpen;
+                if (canSendMessage) {
+                    await group.sendMessage(messageContent);
+                    console.log(`Mensaje enviado con éxito a las ${moment().tz("Europe/Madrid").format('HH:mm:ss')}.`);
+                    clearInterval(interval);
+                } else {
+                    console.log(`Intento ${attempts}: El grupo aún está cerrado para escribir.`);
+                }
+            }, 500);
         } else {
-            console.log(`Esperando la hora correcta: ${currentTime}:${minute}`);
+            console.log("No se encontró el grupo.");
         }
-    });
+    } catch (error) {
+        console.log("Error al enviar el mensaje:", error);
+    }
 }
 
-// Conectar el cliente
-client.initialize();
+client.on('ready', async () => {
+    console.log("Bot listo.");
+    await sendMessage();
+});
+
+initializeSession().then(session => {
+    if (session) {
+        client.initialize();
+    }
+});
