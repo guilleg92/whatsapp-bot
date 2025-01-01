@@ -1,83 +1,68 @@
 const { Client } = require('whatsapp-web.js');
 const redis = require('redis');
 const fs = require('fs');
-const moment = require('moment-timezone');
-const config = require('./config.json');
 
-const client = new Client();
+// Configurar cliente de Redis
+const clientRedis = redis.createClient({
+  url: 'redis://red-ctqi1hbtq21c73a1s6ug:6379'
+});
 
-const redisClient = redis.createClient({ url: config.redis_url });
-redisClient.connect();
+clientRedis.connect();
 
-async function initializeSession() {
-    const sessionData = await redisClient.get('whatsapp-session');
-    if (sessionData) {
-        console.log("Sesión autenticada correctamente.");
-        return JSON.parse(sessionData);
+clientRedis.on('connect', () => {
+  console.log('Conectado a Redis');
+});
+
+clientRedis.on('error', (err) => {
+  console.error('Error en Redis:', err);
+});
+
+// Crear cliente de WhatsApp
+const client = new Client({
+  puppeteer: { headless: true },
+  session: null // Empezamos sin sesión guardada
+});
+
+// Cargar la sesión desde Redis si está disponible
+clientRedis.get('whatsapp_session', (err, session) => {
+  if (err) {
+    console.error('Error al obtener sesión de Redis:', err);
+  } else if (session) {
+    client.initialize();
+    client.session = JSON.parse(session);
+    console.log('Sesión cargada desde Redis');
+  }
+});
+
+// Evento cuando el bot genera un código QR (para la primera vez)
+client.on('qr', (qr) => {
+  console.log('Escanea el código QR con tu WhatsApp:');
+  console.log(qr);
+});
+
+// Evento cuando la sesión se ha autenticado correctamente
+client.on('authenticated', (session) => {
+  console.log('Sesión autenticada');
+  // Guardar la sesión en Redis
+  clientRedis.set('whatsapp_session', JSON.stringify(session), (err, reply) => {
+    if (err) {
+      console.error('Error al guardar la sesión en Redis:', err);
     } else {
-        console.log("Iniciando sesión por primera vez...");
-        return new Promise((resolve, reject) => {
-            client.on('qr', (qr) => {
-                console.log('Escanea este código QR:', qr);
-                resolve(null);
-            });
-            client.on('authenticated', (session) => {
-                redisClient.set('whatsapp-session', JSON.stringify(session));
-                console.log("Sesión guardada correctamente.");
-                resolve(session);
-            });
-            client.on('auth_failure', (error) => {
-                reject(error);
-            });
-        });
+      console.log('Sesión guardada en Redis');
     }
-}
-
-async function sendMessage() {
-    const groupName = config.group_name;
-    const targetTime = config.target_time;  // Ahora tenemos la hora en formato HH:mm
-    const messageContent = config.message_content;
-
-    const currentTime = moment().tz("Europe/Madrid").format('HH:mm');  // Hora actual en formato HH:mm
-    console.log(`Hora actual: ${currentTime}. Hora objetivo: ${targetTime}.`);
-
-    if (currentTime !== targetTime) {
-        console.log(`Aún no es la hora de enviar el mensaje. Hora objetivo: ${targetTime}. Hora actual: ${currentTime}.`);
-        return;
-    }
-
-    try {
-        const group = await client.getChats().then(chats => chats.find(chat => chat.name === groupName));
-        if (group) {
-            console.log(`Grupo encontrado: ${group.name}. Intentando enviar el mensaje...`);
-            let attempts = 0;
-
-            const interval = setInterval(async () => {
-                attempts++;
-                const canSendMessage = group.isOpen;
-                if (canSendMessage) {
-                    await group.sendMessage(messageContent);
-                    console.log(`Mensaje enviado con éxito a las ${moment().tz("Europe/Madrid").format('HH:mm:ss')}.`);
-                    clearInterval(interval);
-                } else {
-                    console.log(`Intento ${attempts}: El grupo aún está cerrado para escribir.`);
-                }
-            }, 500);
-        } else {
-            console.log("No se encontró el grupo.");
-        }
-    } catch (error) {
-        console.log("Error al enviar el mensaje:", error);
-    }
-}
-
-client.on('ready', async () => {
-    console.log("Bot listo.");
-    await sendMessage();
+  });
 });
 
-initializeSession().then(session => {
-    if (session) {
-        client.initialize();
-    }
+// Evento cuando la autenticación falla
+client.on('auth_failure', (msg) => {
+  console.error('Error de autenticación:', msg);
 });
+
+// Evento cuando el bot está listo
+client.on('ready', () => {
+  console.log('Bot está listo para enviar mensajes');
+  // Aquí puedes agregar tu lógica para enviar el mensaje
+});
+
+// Iniciar el cliente
+client.initialize();
