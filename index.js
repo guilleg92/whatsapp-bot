@@ -3,7 +3,7 @@ const qrcode = require('qrcode-terminal');
 require('dotenv').config();
 
 // Configuración
-const groupName = process.env.GROUP_NAME || 'Prueba';
+const groupName = process.env.GROUP_NAME || 'Nombre del grupo';
 const message = process.env.MESSAGE || 'Mensaje a enviar';
 const targetTime = process.env.TARGET_TIME || '12:00'; // Hora en formato HH:mm
 const timezone = 'Europe/Madrid';
