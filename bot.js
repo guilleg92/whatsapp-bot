@@ -1,65 +1,71 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const schedule = require('node-schedule');
 const qrcode = require('qrcode-terminal');
+const schedule = require('node-schedule');
+const fs = require('fs');
 
+// Configuración
+const groupName = 'Prueba'; // Cambiar según sea necesario
+const message = '¡Hola! Este es un mensaje automático.'; // Cambiar según sea necesario
+const madridTime = '11:40'; // Cambiar según sea necesario
+const timeZone = 'Europe/Madrid';
+
+console.log("Iniciando el bot de WhatsApp...");
+
+// Inicializar el cliente con LocalAuth
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true
-    }
 });
 
 client.on('qr', (qr) => {
-    // Genera el código QR para escanear
+    console.log('Escanea este código QR para iniciar sesión:');
     qrcode.generate(qr, { small: true });
-    console.log('Escanea el QR para iniciar sesión');
 });
 
 client.on('ready', () => {
-    console.log('Cliente listo. Buscando el grupo...');
-    
-    // Reemplaza "Prueba" con el nombre de tu grupo
-    const groupName = 'Prueba';
-    const message = 'Mensaje de prueba';
-    
-    // Función para enviar el mensaje
-    const sendMessage = async () => {
-        const chat = await client.getChats();
-        const group = chat.find((c) => c.name === groupName);
-        
-        if (group) {
-            group.sendMessage(message);
-            console.log(`Mensaje enviado a ${groupName}: "${message}"`);
-            return true;
-        }
-        return false;
-    };
+    console.log('El cliente está listo. ✅ La sesión se ha iniciado correctamente.');
 
-    // Programar el mensaje para una hora específica
-    const scheduleTime = '13:05';  // Define la hora en formato HH:mm
+    // Programar el envío del mensaje
+    schedule.scheduleJob({ hour: parseInt(madridTime.split(':')[0]), minute: parseInt(madridTime.split(':')[1]), tz: timeZone }, async () => {
+        console.log(`Buscando el grupo "${groupName}" para enviar el mensaje...`);
 
-    schedule.scheduleJob(scheduleTime, async () => {
-        let success = false;
-        
-        // Intentar enviar el mensaje varias veces hasta que se logre
-        while (!success) {
-            success = await sendMessage();
-            if (!success) {
-                console.log('Intentando nuevamente...');
-                await new Promise(resolve => setTimeout(resolve, 1000));  // Espera de 1 segundo
+        try {
+            const chats = await client.getChats();
+            const group = chats.find((chat) => chat.isGroup && chat.name === groupName);
+
+            if (!group) {
+                console.error(`No se encontró el grupo "${groupName}".`);
+                return;
             }
+
+            console.log(`Grupo "${groupName}" encontrado. Iniciando intentos de envío...`);
+
+            let attempts = 0;
+            const interval = setInterval(async () => {
+                attempts++;
+                console.log(`Intento #${attempts} de enviar el mensaje...`);
+
+                try {
+                    await group.sendMessage(message);
+                    console.log(`Mensaje enviado correctamente a las ${new Date().toLocaleTimeString(timeZone)}.`);
+                    clearInterval(interval); // Detener intentos
+                } catch (err) {
+                    if (!err.message.includes('not authorized')) {
+                        console.error('Error al intentar enviar el mensaje:', err.message);
+                    }
+                }
+            }, 50); // Intentos cada 50ms
+        } catch (err) {
+            console.error('Error al buscar el grupo:', err.message);
         }
-        console.log('Mensaje enviado con éxito!');
-        client.destroy();  // Detener el bot después de enviar el mensaje
     });
 });
 
-client.on('auth_failure', () => {
-    console.log('Autenticación fallida. Por favor, escanea el código QR nuevamente.');
+client.on('auth_failure', (msg) => {
+    console.error('Error de autenticación:', msg);
 });
 
 client.on('disconnected', () => {
-    console.log('Cliente desconectado.');
+    console.log('Cliente desconectado. Por favor, reinicia el bot.');
 });
 
 client.initialize();
