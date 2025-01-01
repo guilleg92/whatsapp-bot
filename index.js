@@ -1,6 +1,5 @@
 const { Client } = require('whatsapp-web.js');
 const redis = require('redis');
-const fs = require('fs');
 
 // Configurar cliente de Redis
 const clientRedis = redis.createClient({
@@ -28,9 +27,11 @@ clientRedis.get('whatsapp_session', (err, session) => {
   if (err) {
     console.error('Error al obtener sesión de Redis:', err);
   } else if (session) {
-    client.initialize();
     client.session = JSON.parse(session);
     console.log('Sesión cargada desde Redis');
+    client.initialize(); // Iniciar sesión si la sesión está guardada
+  } else {
+    client.initialize(); // Si no hay sesión guardada, se inicia normalmente
   }
 });
 
@@ -62,7 +63,9 @@ client.on('auth_failure', (msg) => {
 client.on('ready', () => {
   console.log('Bot está listo para enviar mensajes');
   // Aquí puedes agregar tu lógica para enviar el mensaje
+  // Por ejemplo, enviar el mensaje a la hora determinada
 });
 
 // Iniciar el cliente
 client.initialize();
+
