@@ -33,6 +33,7 @@ client.on('qr', (qr) => {
 
 client.on('ready', () => {
   console.log('¡Bot está listo y autenticado!');
+  sendMessageAtScheduledTime();  // Ahora que el bot está listo, podemos enviar el mensaje
 });
 
 client.on('authenticated', () => {
@@ -98,6 +99,3 @@ http.createServer((req, res) => {
 }).listen(port, () => {
   console.log(`Bot is listening on port ${port}`);
 });
-
-// Ejecutar la función para enviar el mensaje a la hora programada
-sendMessageAtScheduledTime();
