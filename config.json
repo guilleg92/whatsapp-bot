@@ -1,12 +1,5 @@
 {
-  "name": "whatsapp-bot",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "whatsapp-web.js": "^1.20.0",
-    "redis": "^4.6.7"
-  }
+  "groupName": "Prueba",
+  "message": "Este es el mensaje que el bot enviará.",
+  "sendTime": "17:00"
 }
