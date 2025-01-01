@@ -1,102 +1,86 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const QRCode = require('qrcode-terminal');
-const Redis = require('ioredis');
+const { Client } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+const redis = require('redis');
+const client = new Client();
+const GROUP_NAME = 'prueba'; // Nombre del grupo
+const MESSAGE = '¡Hola, este es un mensaje automático!'; // Mensaje a enviar
+const REDIS_URL = 'redis://default:password@your-redis-url:6379'; // URL de Redis, ajústalo a tu configuración
 
-// Configuración de Redis
-const redis = new Redis(process.env.REDIS_URL);
+// Conexión a Redis
+const redisClient = redis.createClient({ url: REDIS_URL });
 
-const groupName = process.env.GROUP_NAME || 'prueba';
-const targetHour = process.env.TARGET_HOUR || '13:00:00';
-const messageContent = process.env.MESSAGE_CONTENT || '¡Hola, este es un mensaje automático!';
-const timeZone = 'Europe/Madrid';
+redisClient.connect();
 
-let sessionData;
-
-// Recuperar la sesión desde Redis
-async function loadSession() {
-    const session = await redis.get('whatsapp-session');
-    if (session) {
-        console.log('Sesión recuperada desde Redis.');
-        return JSON.parse(session);
-    }
-    console.log('No se encontró sesión almacenada.');
-    return null;
-}
-
-// Guardar la sesión en Redis
+// Función para guardar y obtener la sesión desde Redis
 async function saveSession(session) {
-    console.log('Guardando sesión en Redis...');
-    await redis.set('whatsapp-session', JSON.stringify(session));
-    console.log('Sesión guardada correctamente.');
+  await redisClient.set('whatsapp-session', JSON.stringify(session));
 }
 
-// Inicializar cliente de WhatsApp
-async function initializeClient() {
-    const savedSession = await loadSession();
-
-    const client = new Client({
-        authStrategy: new LocalAuth({
-            dataPath: './.wwebjs_auth',
-            session: savedSession, // Cargar sesión si existe
-        }),
-        puppeteer: {
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        },
-    });
-
-    client.on('qr', (qr) => {
-        console.log('Escanea este código QR para iniciar sesión:');
-        QRCode.generate(qr, { small: true });
-    });
-
-    client.on('authenticated', (session) => {
-        console.log('Sesión autenticada.');
-        sessionData = session;
-        saveSession(session);
-    });
-
-    client.on('ready', () => {
-        console.log('Cliente listo. Bot iniciado correctamente.');
-        startBot(client);
-    });
-
-    client.on('auth_failure', () => {
-        console.error('Error de autenticación. Por favor, escanea el QR nuevamente.');
-    });
-
-    client.initialize();
+async function getSession() {
+  const session = await redisClient.get('whatsapp-session');
+  return session ? JSON.parse(session) : null;
 }
 
-function startBot(client) {
-    console.log(`Buscando el grupo: ${groupName}`);
-    client.getChats().then((chats) => {
-        const groupChat = chats.find((chat) => chat.name.trim() === groupName.trim());
-        if (!groupChat) {
-            console.error(`Grupo "${groupName}" no encontrado. Verifica el nombre en la variable GROUP_NAME.`);
-            console.log('Grupos disponibles:');
-            chats.filter(chat => chat.isGroup).forEach(chat => console.log(`- ${chat.name}`));
-            return;
+// Configuración del cliente de WhatsApp
+client.on('qr', (qr) => {
+  qrcode.generate(qr, { small: true });
+  console.log('Escanea el código QR');
+});
+
+client.on('authenticated', (session) => {
+  console.log('Sesión autenticada');
+  saveSession(session); // Guardar sesión en Redis
+});
+
+client.on('ready', () => {
+  console.log('Cliente listo. Bot iniciado correctamente');
+  startBot();
+});
+
+// Función principal para enviar el mensaje
+async function checkAndSendMessage() {
+  try {
+    const group = await client.getChatByName(GROUP_NAME);
+
+    if (group) {
+      // Verificar si el grupo permite enviar mensajes
+      if (group.canSendMessages) {
+        try {
+          await group.sendMessage(MESSAGE);
+          console.log(`Mensaje enviado al grupo "${GROUP_NAME}" a las ${new Date().toLocaleTimeString()}`);
+        } catch (error) {
+          console.log('Error al enviar el mensaje:', error);
         }
-        console.log(`Grupo "${groupName}" encontrado. Esperando la hora ${targetHour} para enviar el mensaje.`);
-
-        const interval = setInterval(() => {
-            const now = new Date().toLocaleTimeString('en-GB', { timeZone });
-            if (now.startsWith(targetHour)) {
-                console.log(`Intentando enviar mensaje al grupo "${groupName}"...`);
-                groupChat.sendMessage(messageContent).then(() => {
-                    console.log(`Mensaje enviado al grupo "${groupName}" a las ${now}`);
-                    clearInterval(interval); // Detener los intentos
-                }).catch((err) => {
-                    console.error('Error al enviar el mensaje:', err);
-                });
-            } else {
-                console.log(`Hora actual: ${now}. Aún no es la hora objetivo.`);
-            }
-        }, 500); // Intentar cada 500ms
-    }).catch((err) => {
-        console.error('Error al obtener los chats:', err);
-    });
+      } else {
+        console.log(`El grupo "${GROUP_NAME}" está bloqueado para escribir. Realizando nuevos intentos...`);
+        setTimeout(checkAndSendMessage, 500); // Intentar de nuevo en 0,5 segundos
+      }
+    } else {
+      console.log(`Grupo "${GROUP_NAME}" no encontrado. Reintentando...`);
+      setTimeout(checkAndSendMessage, 500); // Intentar de nuevo en 0,5 segundos
+    }
+  } catch (error) {
+    console.log('Error al obtener el grupo:', error);
+    setTimeout(checkAndSendMessage, 500); // Intentar de nuevo en 0,5 segundos
+  }
 }
 
-// Iniciar cliente
-initializeClient();
+// Iniciar la verificación cuando se alcanza la hora objetivo
+function startBot() {
+  const targetTime = '13:00:00'; // Hora objetivo para enviar el mensaje (hora en formato HH:MM:SS)
+  
+  const checkTime = setInterval(() => {
+    const currentTime = new Date().toLocaleTimeString('es-ES', { hour12: false });
+
+    console.log(`Hora actual: ${currentTime}. Aún no es la hora objetivo.`);
+
+    if (currentTime === targetTime) {
+      console.log('¡Es la hora objetivo! Intentando enviar mensaje...');
+      checkAndSendMessage();
+      clearInterval(checkTime); // Detener la verificación de la hora una vez que se alcanza la hora objetivo
+    }
+  }, 1000); // Verificar cada segundo si se ha alcanzado la hora objetivo
+}
+
+// Inicializar la sesión
+client.initialize();
