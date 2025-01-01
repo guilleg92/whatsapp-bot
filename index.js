@@ -1,46 +1,60 @@
-const { Client } = require('@whatsapp/web.js');
+// Importa la librería correcta
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+const express = require('express');
 const redis = require('redis');
+const { CronJob } = require('cron');
+const fs = require('fs');
 
-// Conexión a Redis (esto se configurará como variable de entorno en Render)
-const redisUrl = process.env.REDIS_URL;
-const client = redis.createClient({
-  url: redisUrl,
-});
+// Crea un cliente de Redis (asegúrate de tener Redis configurado correctamente)
+const client = redis.createClient({ url: 'redis://localhost:6379' });
 
-client.connect().then(() => {
-  console.log('Conectado a Redis');
-}).catch((err) => {
-  console.error('Error al conectar a Redis:', err);
-});
-
-// Crear cliente de WhatsApp
+// Crea una nueva instancia del cliente de WhatsApp con autenticación local
 const whatsappClient = new Client({
-  puppeteer: {
-    headless: true,  // Configuración de Puppeteer para usar el navegador sin interfaz gráfica
-  },
+  authStrategy: new LocalAuth(),
 });
 
-// Evento de QR
+// Genera el código QR para la autenticación
 whatsappClient.on('qr', (qr) => {
-  console.log('Escanea este código QR para iniciar sesión:', qr);
+  qrcode.generate(qr, { small: true });
 });
 
-// Evento de autenticación
-whatsappClient.on('authenticated', (session) => {
-  console.log('Sesión autenticada');
-  client.set('whatsapp-session', JSON.stringify(session), (err) => {
-    if (err) {
-      console.error('Error al guardar la sesión en Redis:', err);
+// Conecta el cliente de WhatsApp
+whatsappClient.on('ready', () => {
+  console.log('Cliente de WhatsApp listo');
+});
+
+// Inicia el cliente de WhatsApp
+whatsappClient.initialize();
+
+// Definir la tarea cron
+const job = new CronJob('0 0 * * *', () => {
+  // Lógica para enviar mensajes al grupo
+  console.log('Intentando enviar mensaje al grupo...');
+
+  // Reemplaza 'group_name' con el nombre del grupo de WhatsApp al que deseas enviar el mensaje
+  const groupName = 'prueba';
+  const message = '¡Este es un mensaje automático!';
+
+  whatsappClient.getChats().then((chats) => {
+    const group = chats.find((chat) => chat.name === groupName);
+
+    if (group) {
+      // Si encontramos el grupo, enviamos el mensaje
+      group.sendMessage(message);
+      console.log(`Mensaje enviado al grupo ${groupName} a las 00:00`);
     } else {
-      console.log('Sesión guardada correctamente en Redis');
+      console.log(`Grupo ${groupName} no encontrado.`);
     }
   });
 });
 
-// Evento cuando el cliente está listo
-whatsappClient.on('ready', () => {
-  console.log('Cliente listo');
+// Inicia la tarea cron
+job.start();
+
+// Servidor Express (si es necesario)
+const app = express();
+app.listen(3000, () => {
+  console.log('Servidor corriendo en el puerto 3000');
 });
 
-// Iniciar el cliente de WhatsApp
-whatsappClient.initialize();
