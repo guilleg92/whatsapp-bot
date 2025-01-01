@@ -1,17 +1,14 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "WhatsApp bot for sending messages at the exact moment the group is unblocked",
+  "description": "Bot para enviar mensajes en WhatsApp a un grupo específico.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.19.0",
-    "redis": "^4.0.0",
-    "moment-timezone": "^0.5.34"
-  },
-  "engines": {
-    "node": ">=14.0.0"
+    "whatsapp-web.js": "^1.19.5",
+    "moment-timezone": "^0.5.42",
+    "redis": "^4.6.7"
   }
 }
