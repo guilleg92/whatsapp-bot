@@ -1,89 +1,70 @@
-const { Client } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const redis = require('redis');
 const moment = require('moment-timezone');
 const cron = require('node-cron');
 
-// Variables configurables
-const groupName = 'Nombre del grupo'; // Cambia esto por el nombre de tu grupo
-const message = '¡Este es un mensaje automatizado!'; // El mensaje a enviar
-const targetTime = '13:00'; // Hora en la que se abrirá el grupo (hora de Madrid)
-const timezone = 'Europe/Madrid'; // Zona horaria de Madrid
-
 // Configuración de Redis
 const redisClient = redis.createClient({
-  host: 'localhost', // Cambia esto si usas un Redis remoto
-  port: 6379,
+    url: process.env.REDIS_URL
 });
 
-redisClient.on('connect', () => {
-  console.log('Conectado a Redis');
-});
+redisClient.connect().catch(err => console.log("Error connecting to Redis:", err));
 
-// Crear cliente de WhatsApp
+// Configuración de WhatsApp Web
 const client = new Client({
-  puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  },
+    authStrategy: new LocalAuth(),
+    puppeteer: { headless: true }
 });
 
-// Verifica si la sesión ya está guardada en Redis
-const authenticate = () => {
-  redisClient.get('session', (err, session) => {
-    if (session) {
-      console.log('Sesión autenticada automáticamente');
-      client.initialize();
+// Función para iniciar sesión
+client.on('qr', (qr) => {
+    qrcode.generate(qr, { small: true });
+    console.log('Escanea el QR para iniciar sesión');
+});
+
+client.on('authenticated', () => {
+    console.log('Autenticado correctamente');
+});
+
+client.on('ready', () => {
+    console.log('El bot está listo');
+    startMessageTask();
+});
+
+// Función para enviar el mensaje
+async function sendMessage() {
+    const groupName = process.env.GROUP_NAME;
+    const message = process.env.MESSAGE_CONTENT;
+    const group = await client.getChats().then(chats => {
+        return chats.find(chat => chat.name === groupName);
+    });
+
+    if (group) {
+        console.log('Grupo encontrado, enviando mensaje...');
+        await group.sendMessage(message);
+        console.log(`Mensaje enviado a las ${moment().format('YYYY-MM-DD HH:mm:ss')}`);
     } else {
-      client.on('qr', (qr) => {
-        console.log('Escanea este código QR:');
-        qrcode.generate(qr, { small: true });
-      });
-      client.on('authenticated', (session) => {
-        console.log('Sesión iniciada por primera vez');
-        redisClient.set('session', JSON.stringify(session), (err) => {
-          if (err) console.error('Error al guardar la sesión:', err);
-        });
-      });
-      client.initialize();
+        console.log('Grupo no encontrado');
     }
-  });
-};
+}
 
-// Función para enviar el mensaje cuando sea posible
-const sendMessageWhenAvailable = () => {
-  const interval = setInterval(async () => {
-    try {
-      const chat = await client.getChats();
-      const group = chat.find((g) => g.name === groupName);
-      if (group && group.isGroup) {
-        if (group.isReadOnly === false) {
-          await group.sendMessage(message);
-          console.log(`Mensaje enviado a ${groupName} a las ${moment().format('HH:mm:ss')}`);
-          clearInterval(interval); // Detenemos el intervalo una vez que se envía el mensaje
+// Función para comprobar si el grupo está abierto y enviar el mensaje
+function startMessageTask() {
+    const targetHour = 13; // Hora objetivo (13:00 Madrid)
+
+    cron.schedule('*/0.5 * * * * *', async () => {
+        const currentTime = moment().tz('Europe/Madrid').hour();
+        const minute = moment().tz('Europe/Madrid').minute();
+
+        if (currentTime === targetHour && minute === 0) {
+            console.log('¡Hora de enviar el mensaje!');
+            await sendMessage();
         } else {
-          console.log('El grupo sigue restringido, esperando...');
+            console.log(`Esperando la hora correcta: ${currentTime}:${minute}`);
         }
-      }
-    } catch (error) {
-      console.error('Error al intentar enviar el mensaje:', error);
-    }
-  }, 500); // Intentos cada 0.5 segundos
-};
+    });
+}
 
-// Configurar tarea cron para ejecutar a la hora determinada
-cron.schedule(`0 13 * * *`, () => {
-  console.log(`Ejecutando tarea programada a las ${moment().format('HH:mm:ss')}`);
-  sendMessageWhenAvailable();
-}, {
-  scheduled: true,
-  timezone: timezone,
-});
-
-// Iniciar autenticación y client
-authenticate();
-
-// Manejar desconexión
-client.on('disconnected', () => {
-  console.log('Cliente desconectado');
-});
+// Conectar el cliente
+client.initialize();
