@@ -18,9 +18,13 @@ client.on('qr', (qr) => {
 });
 
 client.on('authenticated', (session) => {
-    console.log('Sesión autenticada. Actualiza la variable de entorno con esta sesión:');
-    console.log(JSON.stringify(session)); // Mostrar el JSON de la sesión en los logs
-    sessionData = session; // Guardar sesión en memoria
+    if (session) {
+        console.log('Sesión autenticada. Actualiza la variable de entorno con esta sesión:');
+        console.log(JSON.stringify(session)); // Mostrar el JSON de la sesión
+        sessionData = session; // Guardar sesión en memoria
+    } else {
+        console.error('Sesión autenticada, pero no se recibieron datos de la sesión.');
+    }
 });
 
 client.on('auth_failure', (msg) => {
