@@ -3,98 +3,86 @@ const qrcode = require('qrcode-terminal');
 const moment = require('moment-timezone');
 const fs = require('fs');
 
-// Cargar la configuración desde config.json
+// Cargar configuración
 const config = JSON.parse(fs.readFileSync('config.json', 'utf8'));
 
-// Variables globales
-let client;
+// Crear el cliente de WhatsApp con autenticación local
+const client = new Client({
+    authStrategy: new LocalAuth()
+});
 
-// Función para iniciar sesión y manejar la autenticación
-function startBot() {
-    client = new Client({
-        authStrategy: new LocalAuth(),
-        puppeteer: {
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        }
-    });
+// Mostrar el código QR cuando no está autenticado
+client.on('qr', (qr) => {
+    qrcode.generate(qr, { small: true });
+    console.log('Escanea el código QR para iniciar sesión.');
+});
 
-    client.on('qr', (qr) => {
-        console.log('Escanea el código QR');
-        qrcode.generate(qr, { small: true });
-    });
+// Cuando el cliente esté listo, proceder con la lógica
+client.on('ready', async () => {
+    console.log('¡Autenticado correctamente!');
 
-    client.on('authenticated', () => {
-        console.log('Autenticado correctamente');
-    });
+    // Obtener la hora actual en Madrid
+    const now = moment().tz('Europe/Madrid');
+    console.log(`Hora actual en Madrid: ${now.format('HH:mm')}`);
 
-    client.on('ready', () => {
-        console.log('El bot está listo');
-        monitorGroup();
-    });
+    // Hora objetivo de la configuración
+    const targetTime = moment(config.time, 'HH:mm').tz('Europe/Madrid');
+    console.log(`Hora objetivo: ${targetTime.format('HH:mm')}`);
 
-    client.on('message', (message) => {
-        // Si el bot recibe un mensaje, no hacer nada
-    });
+    // Si aún no es la hora de enviar el mensaje
+    if (now.isBefore(targetTime)) {
+        console.log('Aún no es la hora de enviar el mensaje');
+        return;
+    }
 
-    client.initialize();
+    // Buscar el grupo
+    const chat = await findGroup(config.groupName);
+    if (!chat) {
+        console.log(`No se encontró el grupo ${config.groupName}`);
+        return;
+    }
+
+    // Verificar si el grupo está bloqueado para escribir
+    if (chat.isLocked) {
+        console.log('El grupo está bloqueado para escribir.');
+        await waitForUnlock(chat);
+    }
+
+    // Enviar el mensaje
+    await sendMessage(chat);
+    console.log('Mensaje enviado con éxito');
+});
+
+// Función para encontrar el grupo
+async function findGroup(groupName) {
+    const chats = await client.getChats();
+    const chat = chats.find(c => c.name === groupName);
+    return chat;
 }
 
-// Función para verificar si el grupo está habilitado para escribir
-async function isGroupOpen(groupName) {
-    const chat = await client.getChats();
-    const group = chat.find((g) => g.name === groupName);
-    if (group) {
-        return group.isGroup && group.isLocked === false; // Si el grupo está desbloqueado
+// Función para esperar que el grupo sea desbloqueado
+async function waitForUnlock(chat) {
+    console.log('Esperando a que el grupo sea desbloqueado...');
+    let attempts = 0;
+
+    while (chat.isLocked) {
+        attempts++;
+        console.log(`Intentando (intentos: ${attempts})...`);
+        await sleep(500); // Esperar 0.5 segundos
+        chat = await findGroup(config.groupName);
     }
-    return false;
+    console.log('El grupo ha sido desbloqueado');
 }
 
 // Función para enviar el mensaje
-async function sendMessage(groupName, messageContent) {
-    const chat = await client.getChats();
-    const group = chat.find((g) => g.name === groupName);
-    if (group && !group.isLocked) {
-        group.sendMessage(messageContent);
-        console.log(`Mensaje enviado: ${messageContent}`);
-    }
+async function sendMessage(chat) {
+    await chat.sendMessage(config.message);
 }
 
-// Función para verificar la hora y enviar el mensaje
-function checkTimeAndSend() {
-    const now = moment().tz('Europe/Madrid');
-    const targetTime = moment(config.time, 'HH:mm').tz('Europe/Madrid');
-    console.log(`Hora actual: ${now.format('HH:mm')}`);
-    console.log(`Hora objetivo: ${targetTime.format('HH:mm')}`);
-
-    if (now.isSameOrAfter(targetTime)) {
-        // Si la hora objetivo ya pasó, intentar enviar el mensaje
-        console.log('Es hora de intentar enviar el mensaje');
-        trySendingMessage();
-    } else {
-        console.log('Aún no es la hora de enviar el mensaje');
-    }
+// Función de pausa
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Función para intentar enviar el mensaje cada 0.5 segundos hasta que se habilite el grupo
-async function trySendingMessage() {
-    const groupName = config.groupName;
-    const messageContent = config.message;
-
-    let attempts = 0;
-    const interval = setInterval(async () => {
-        attempts++;
-        console.log(`Intento ${attempts}`);
-        const groupOpen = await isGroupOpen(groupName);
-        if (groupOpen) {
-            await sendMessage(groupName, messageContent);
-            clearInterval(interval); // Detener los intentos una vez enviado el mensaje
-        }
-    }, 500);
-}
-
-// Comenzar el bot
-startBot();
-
-// Verificar la hora cada minuto
-setInterval(checkTimeAndSend, 60000);
+// Iniciar sesión
+client.initialize();
