@@ -1,17 +1,14 @@
 {
   "name": "whatsapp-bot",
   "version": "1.0.0",
-  "description": "Whatsapp bot using whatsapp-web.js",
+  "description": "Bot para enviar mensajes en WhatsApp de forma automática.",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.0.0",
+    "whatsapp-web.js": "^1.20.0",
     "qrcode-terminal": "^0.12.0",
-    "node-schedule": "^2.0.0"
-  },
-  "devDependencies": {},
-  "author": "",
-  "license": "ISC"
+    "node-schedule": "^2.1.1"
+  }
 }
