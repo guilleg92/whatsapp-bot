@@ -1,3 +1,6 @@
+// Suprimir las advertencias de deprecación
+process.removeAllListeners('warning');
+
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const redis = require('redis');
 const fs = require('fs');
@@ -19,16 +22,13 @@ redisClient.connect()
 // Crear el cliente de WhatsApp con autenticación local (usando Redis para la sesión)
 const client = new Client({
   authStrategy: new LocalAuth(),  // Utiliza LocalAuth para guardar la sesión
-  puppeteer: { 
-    headless: false,  // Cambiar a false para permitir la visualización del navegador y QR
-    args: ['--no-sandbox', '--disable-setuid-sandbox'] // Para evitar problemas de sandboxing en algunos entornos
-  },
+  puppeteer: { headless: true },  // Ejecuta el navegador en modo headless
   restartOnAuthFail: true  // Reinicia el cliente si la autenticación falla
 });
 
 // Manejo de eventos del cliente de WhatsApp
 client.on('qr', (qr) => {
-  console.log('Escanea el código QR con tu WhatsApp:', qr); // Aquí se debería generar el QR visualmente
+  console.log('Escanea el código QR con tu WhatsApp:', qr);
 });
 
 client.on('ready', () => {
